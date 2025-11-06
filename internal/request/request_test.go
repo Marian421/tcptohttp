@@ -71,4 +71,8 @@ func TestRequestFromReader(t *testing.T) {
 	assert.Equal(t, "GET", r.RequestLine.Method)
 	assert.Equal(t, "/coffee", r.RequestLine.RequestTarget)
 	assert.Equal(t, "1.1", r.RequestLine.HttpVersion)
+
+	// Test http version
+	_, err = RequestFromReader(strings.NewReader("GET / HTTP/2.0\r\n"))
+	require.Error(t, err)
 }
