@@ -8,8 +8,12 @@ import (
 
 type Headers map[string]string
 
-func newHeaders() Headers {
+func NewHeaders() Headers {
 	return make(Headers)
+}
+
+func (h Headers) Get(key string) string {
+	return h[strings.ToLower(key)]
 }
 
 func (h Headers) hasKey(key string) bool {
