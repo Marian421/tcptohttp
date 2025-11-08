@@ -12,6 +12,15 @@ func newHeaders() Headers {
 	return make(Headers)
 }
 
+func (h Headers) hasKey(key string) bool {
+	hasKey := false
+
+	if _, ok := h[key]; ok {
+		hasKey = true
+	}
+	return hasKey
+}
+
 var sep = []byte("\r\n")
 
 // takes a request line without the separator
@@ -81,6 +90,7 @@ func (h Headers) Parse(data []byte) (int, bool, error) {
 		// Empty line - the end of header
 		if idx == 0 {
 			done = true
+			read = read + len(sep)
 			break
 		}
 
@@ -99,6 +109,12 @@ func (h Headers) Parse(data []byte) (int, bool, error) {
 		// field-name to lowercase
 		header = strings.ToLower(header)
 
+		// check if key already exists, if yes, format field-value to be
+		// value1, value2, ..., valueN
+
+		if h.hasKey(header) {
+			value = h[header] + ", " + value
+		}
 		// add the field-name: field-value pair in the map
 		h[header] = value
 

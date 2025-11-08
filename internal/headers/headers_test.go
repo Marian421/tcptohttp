@@ -20,7 +20,7 @@ func TestParse(t *testing.T) {
 			name:     "Valid single header",
 			input:    []byte("Host: localhost:42069\r\n\r\n"),
 			want:     map[string]string{"host": "localhost:42069"},
-			wantN:    23,
+			wantN:    25,
 			wantDone: true,
 			wantErr:  false,
 		}, {
@@ -41,7 +41,7 @@ func TestParse(t *testing.T) {
 			name:     "Trims the whitespaces",
 			input:    []byte("Host:    localhost:42069   \r\n\r\n"),
 			want:     map[string]string{"host": "localhost:42069"},
-			wantN:    29,
+			wantN:    31,
 			wantDone: true,
 			wantErr:  false,
 		}, {
@@ -58,6 +58,13 @@ func TestParse(t *testing.T) {
 			wantN:    0,
 			wantDone: false,
 			wantErr:  true,
+		}, {
+			name:     "Multiple values for a header",
+			input:    []byte("Set-person: person1\r\nSet-person: person2\r\n\r\n"),
+			want:     map[string]string{"set-person": "person1, person2"},
+			wantN:    44,
+			wantDone: true,
+			wantErr:  false,
 		},
 	}
 
