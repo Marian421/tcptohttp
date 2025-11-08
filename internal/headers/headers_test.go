@@ -19,7 +19,7 @@ func TestParse(t *testing.T) {
 		{
 			name:     "Valid single header",
 			input:    []byte("Host: localhost:42069\r\n\r\n"),
-			want:     map[string]string{"Host": "localhost:42069"},
+			want:     map[string]string{"host": "localhost:42069"},
 			wantN:    23,
 			wantDone: true,
 			wantErr:  false,
@@ -32,7 +32,7 @@ func TestParse(t *testing.T) {
 			wantErr:  true,
 		}, {
 			name:     "Spacing between header and colon",
-			input:    []byte("Host : localhost:42069\r\n\r\n"),
+			input:    []byte("host : localhost:42069\r\n\r\n"),
 			want:     nil,
 			wantN:    0,
 			wantDone: false,
@@ -40,17 +40,24 @@ func TestParse(t *testing.T) {
 		}, {
 			name:     "Trims the whitespaces",
 			input:    []byte("Host:    localhost:42069   \r\n\r\n"),
-			want:     map[string]string{"Host": "localhost:42069"},
+			want:     map[string]string{"host": "localhost:42069"},
 			wantN:    29,
 			wantDone: true,
 			wantErr:  false,
 		}, {
-			name:     "idk",
+			name:     "Not done with the parsing",
 			input:    []byte("Host:    localhost:42069   \r\n"),
-			want:     map[string]string{"Host": "localhost:42069"},
+			want:     map[string]string{"host": "localhost:42069"},
 			wantN:    29,
 			wantDone: false,
 			wantErr:  false,
+		}, {
+			name:     "Validates field-name charachters",
+			input:    []byte("H©st: localhost:42069\r\n\r\n"),
+			want:     nil,
+			wantN:    0,
+			wantDone: false,
+			wantErr:  true,
 		},
 	}
 

@@ -3,6 +3,7 @@ package headers
 import (
 	"bytes"
 	"fmt"
+	"strings"
 )
 
 type Headers map[string]string
@@ -30,6 +31,42 @@ func parseHeader(line []byte) (string, string, error) {
 	return string(fieldNameParts[0]), string(trimmedValue), nil
 }
 
+// check is rune is valid
+func isTchar(r rune) bool {
+	if r >= 'a' && r <= 'z' {
+		return true
+	}
+	if r >= 'A' && r <= 'Z' {
+		return true
+	}
+	if r >= '0' && r <= '9' {
+		return true
+	}
+
+	switch r {
+	case '!', '#', '$', '%', '&', '\'', '*', '+', '-', '.', '^',
+		'_', '`', '|', '~':
+		return true
+	}
+
+	return false
+}
+
+// checks is a field-name has valid characters
+func isValidFieldName(s string) bool {
+	if len(s) == 0 {
+		return false
+	}
+
+	for _, r := range s {
+		if !isTchar(r) {
+			return false
+		}
+	}
+
+	return true
+}
+
 func (h Headers) Parse(data []byte) (int, bool, error) {
 	read := 0
 	done := false
@@ -54,7 +91,15 @@ func (h Headers) Parse(data []byte) (int, bool, error) {
 			return read, done, fmt.Errorf("error while trying to parse bytes %d-%d: %w", read, lineEnd, err)
 		}
 
-		// add the pair in the map
+		// check for special characters in field-name
+		if !isValidFieldName(header) {
+			return read, done, fmt.Errorf("field-name contains invalid characters")
+		}
+
+		// field-name to lowercase
+		header = strings.ToLower(header)
+
+		// add the field-name: field-value pair in the map
 		h[header] = value
 
 		read = lineEnd + len(sep)
