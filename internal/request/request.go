@@ -5,18 +5,22 @@ import (
 	"fmt"
 	"io"
 	"strings"
+
+	"github.com/Marian421/tcptohttp/internal/headers"
 )
 
 type Request struct {
 	RequestLine RequestLine
+	Headers     headers.Headers
 	state       parserState
 }
 
 type parserState string
 
 const (
-	StateInit parserState = "init"
-	StateDone parserState = "done"
+	StateInit           parserState = "init"
+	StateDone           parserState = "done"
+	StateParsingHeaders parserState = "parsing"
 )
 
 func newRequest() *Request {
@@ -98,7 +102,7 @@ func (r *Request) parse(data []byte) (int, error) {
 	case StateInit:
 		rl, n, err := parseRequestLine(data)
 		if n > 0 {
-			r.state = StateDone
+			r.state = StateParsingHeaders
 			if rl == nil {
 				return n, err
 			}
@@ -112,7 +116,15 @@ func (r *Request) parse(data []byte) (int, error) {
 		if err != nil {
 			return n, err
 		}
-
+	case StateParsingHeaders:
+		n, done, err := r.Headers.Parse(data)
+		if err != nil {
+			return n, fmt.Errorf("error while trying to parse headers: %w", err)
+		}
+		if done {
+			r.state = StateDone
+		}
+		return n, err
 	case StateDone:
 		return 0, nil
 	}
@@ -122,6 +134,7 @@ func (r *Request) parse(data []byte) (int, error) {
 
 func RequestFromReader(reader io.Reader) (*Request, error) {
 	request := newRequest()
+	request.Headers = headers.NewHeaders()
 
 	// NOTE: Works for now because we don't take the content currently
 	buffer := make([]byte, 1024)
@@ -139,8 +152,10 @@ func RequestFromReader(reader io.Reader) (*Request, error) {
 			working = append(working, buffer[:n]...)
 		}
 
-		// TODO: What to do here?
 		if err != nil {
+			if err == io.EOF {
+				return nil, fmt.Errorf("malformed request, missing carriage return")
+			}
 			return nil, err
 		}
 
