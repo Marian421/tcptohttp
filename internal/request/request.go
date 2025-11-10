@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"strconv"
 	"strings"
 
 	"github.com/Marian421/tcptohttp/internal/headers"
@@ -12,6 +13,7 @@ import (
 type Request struct {
 	RequestLine RequestLine
 	Headers     headers.Headers
+	Body        []byte
 	state       parserState
 }
 
@@ -20,7 +22,8 @@ type parserState string
 const (
 	StateInit           parserState = "init"
 	StateDone           parserState = "done"
-	StateParsingHeaders parserState = "parsing"
+	StateParsingHeaders parserState = "parsingHeaders"
+	StateParsingBody    parserState = "parsingBody"
 )
 
 func newRequest() *Request {
@@ -41,6 +44,7 @@ type RequestLine struct {
 }
 
 var SEPARATOR = []byte("\r\n")
+var chunk int = 8
 var ERROR_MALFORMED_START_LINE = fmt.Errorf("malformed start line")
 var ERROR_UNAVAILABLE_VERSION = fmt.Errorf("unavailable http version, required 1.1")
 var ERROR_MALFORMED_HTTP_FORMAT = fmt.Errorf("should be HTTP/1.1, the separator should be '/'")
@@ -122,9 +126,16 @@ func (r *Request) parse(data []byte) (int, error) {
 			return n, fmt.Errorf("error while trying to parse headers: %w", err)
 		}
 		if done {
-			r.state = StateDone
+			r.state = StateParsingBody
 		}
 		return n, err
+	case StateParsingBody:
+		r.Body = append(r.Body, data...)
+		if len(data) < chunk {
+			r.state = StateDone
+		}
+		return len(data), nil
+
 	case StateDone:
 		return 0, nil
 	}
@@ -139,22 +150,22 @@ func RequestFromReader(reader io.Reader) (*Request, error) {
 	// NOTE: Works for now because we don't take the content currently
 	buffer := make([]byte, 1024)
 
-	// reading small chunks of data
-	readPerCycle := 8
-
 	// cummulates bytes till it parses the first line from the reader
 	var working []byte
 
 	for !request.done() {
-		n, err := reader.Read(buffer[:readPerCycle])
+		n, err := reader.Read(buffer[:chunk])
 
 		if n > 0 {
 			working = append(working, buffer[:n]...)
 		}
 
 		if err != nil {
+			if err == io.EOF && request.state == StateParsingHeaders {
+				return nil, fmt.Errorf("malformed request, missing cariage return before content")
+			}
 			if err == io.EOF {
-				return nil, fmt.Errorf("malformed request, missing carriage return")
+				return request, nil
 			}
 			return nil, err
 		}
@@ -169,7 +180,18 @@ func RequestFromReader(reader io.Reader) (*Request, error) {
 		}
 
 		working = working[readN:]
+	}
 
+	contentLengthStr, ok := request.Headers["content-length"]
+	if ok {
+		contentLength, err := strconv.Atoi(contentLengthStr)
+		if err != nil {
+			return nil, fmt.Errorf("invalid Content-Length header")
+		}
+
+		if contentLength != len(request.Body) {
+			return nil, fmt.Errorf("Content-Length doesn't match with the actual size of the content body")
+		}
 	}
 
 	return request, nil
