@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"io"
 	"net"
+
+	"github.com/Marian421/tcptohttp/internal/response"
 )
 
 type Server struct {
@@ -23,8 +25,15 @@ func (s *Server) Close() error {
 }
 
 func runConnection(conn io.ReadWriteCloser) {
-	out := []byte("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 13\r\n\r\nHello World!")
-	conn.Write(out)
+	if err := response.WriteStatusLine(conn, response.StatusOk); err != nil {
+		// what to do
+	}
+	h := response.GetDefaultHeaders(0)
+
+	if err := response.WriteHeaders(conn, h); err != nil {
+		// what to do
+	}
+
 	conn.Close()
 }
 

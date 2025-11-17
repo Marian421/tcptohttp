@@ -16,6 +16,11 @@ func (h Headers) Get(key string) string {
 	return h[strings.ToLower(key)]
 }
 
+func (h Headers) Set(key, value string) {
+	key = strings.ToLower(key)
+	h[key] = value
+}
+
 func (h Headers) hasKey(key string) bool {
 	hasKey := false
 
