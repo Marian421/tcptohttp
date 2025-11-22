@@ -44,7 +44,7 @@ type RequestLine struct {
 }
 
 var SEPARATOR = []byte("\r\n")
-var chunk int = 8
+var chunk int = 512
 var ERROR_MALFORMED_START_LINE = fmt.Errorf("malformed start line")
 var ERROR_UNAVAILABLE_VERSION = fmt.Errorf("unavailable http version, required 1.1")
 var ERROR_MALFORMED_HTTP_FORMAT = fmt.Errorf("should be HTTP/1.1, the separator should be '/'")
@@ -61,7 +61,6 @@ func (r *RequestLine) ValidHttp() bool {
 // takes a slice of bytes and tries to parse the request line
 // if succesful, returns a pointer to the request line and the number of bytes it read
 func parseRequestLine(b []byte) (*RequestLine, int, error) {
-	//NOTE: If it can't find a \r\n it should return 0, err
 	idx := bytes.Index(b, SEPARATOR)
 	if idx == -1 {
 		return nil, 0, nil
@@ -131,9 +130,6 @@ func (r *Request) parse(data []byte) (int, error) {
 		return n, err
 	case StateParsingBody:
 		r.Body = append(r.Body, data...)
-		if len(data) < chunk {
-			r.state = StateDone
-		}
 		return len(data), nil
 
 	case StateDone:
@@ -155,33 +151,37 @@ func RequestFromReader(reader io.Reader) (*Request, error) {
 
 	for !request.done() {
 		n, err := reader.Read(buffer[:chunk])
-
 		if n > 0 {
 			working = append(working, buffer[:n]...)
 		}
 
-		if err != nil {
-			if err == io.EOF && request.state == StateParsingHeaders {
-				return nil, fmt.Errorf("malformed request, missing cariage return before content")
+		// Try to parse as much as we can
+		for len(working) > 0 {
+			readN, parseErr := request.parse(working)
+			if parseErr != nil {
+				return nil, parseErr
 			}
+			if readN == 0 {
+				break // need more data
+			}
+			working = working[readN:]
+		}
+
+		// Now handle errors
+		if err != nil {
 			if err == io.EOF {
-				return request, nil
+				// If headers are not done, this is a real malformed request
+				if request.state == StateParsingHeaders {
+					return nil, fmt.Errorf("malformed request: EOF before headers finished")
+				}
+
+				// Body may end at EOF
+				request.state = StateDone
+				break
 			}
 			return nil, err
 		}
-
-		// if it can't read a line returns 0 bytes read
-		readN, err := request.parse(working)
-		if readN == 0 {
-			continue
-		}
-		if err != nil {
-			return nil, err
-		}
-
-		working = working[readN:]
 	}
-
 	contentLengthStr, ok := request.Headers["content-length"]
 	if ok {
 		contentLength, err := strconv.Atoi(contentLengthStr)
