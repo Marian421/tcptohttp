@@ -124,8 +124,15 @@ func (r *Request) parse(data []byte) (int, error) {
 		if err != nil {
 			return n, fmt.Errorf("error while trying to parse headers: %w", err)
 		}
+
 		if done {
-			r.state = StateParsingBody
+			contentLen := r.Headers.Get("content-length")
+
+			if contentLen == "" || contentLen == "0" {
+				r.state = StateDone
+			} else {
+				r.state = StateParsingBody
+			}
 		}
 		return n, err
 	case StateParsingBody:

@@ -1,17 +1,28 @@
 package server
 
 import (
+	"bufio"
+	"bytes"
 	"fmt"
 	"io"
 	"net"
 
+	"github.com/Marian421/tcptohttp/internal/request"
 	"github.com/Marian421/tcptohttp/internal/response"
 )
 
 type Server struct {
 	listener net.Listener
 	closed   bool
+	handler  Handler
 }
+
+type HandlerError struct {
+	Status  response.StatusCode
+	Message string
+}
+
+type Handler func(w io.Writer, req *request.Request) *HandlerError
 
 func (s *Server) Close() error {
 	err := s.listener.Close()
@@ -24,17 +35,40 @@ func (s *Server) Close() error {
 	return nil
 }
 
-func runConnection(conn io.ReadWriteCloser) {
-	if err := response.WriteStatusLine(conn, response.StatusOk); err != nil {
-		// what to do
-	}
-	h := response.GetDefaultHeaders(0)
+func runConnection(conn io.ReadWriteCloser, s *Server) {
+	defer conn.Close()
 
-	if err := response.WriteHeaders(conn, h); err != nil {
-		// what to do
+	r, err := request.RequestFromReader(conn)
+	if err != nil {
+		return
 	}
 
-	conn.Close()
+	var buf bytes.Buffer
+	handlerErr := s.handler(&buf, r)
+
+	// Wrap the connection to flush all writes immediately
+	bw := bufio.NewWriter(conn)
+
+	if handlerErr != nil {
+		fmt.Printf("message: %s", handlerErr.Message)
+		fmt.Printf("status: %d", handlerErr.Status)
+
+		response.WriteStatusLine(bw, handlerErr.Status)
+		response.WriteHeaders(bw, response.GetDefaultHeaders(len(handlerErr.Message)))
+		bw.Write([]byte(handlerErr.Message))
+
+		bw.Flush() // <- THIS ensures all bytes go to the socket immediately
+		return
+	}
+
+	response.WriteStatusLine(bw, response.StatusOk)
+	response.WriteHeaders(bw, response.GetDefaultHeaders(buf.Len()))
+	bw.Write(buf.Bytes())
+	bw.Flush() // flush normal response
+}
+
+func WriteErrors(w io.Writer, err *HandlerError) {
+	fmt.Fprintf(w, "Error %d: %s\n", err.Status, err.Message)
 }
 
 func runServer(s *Server, listener net.Listener) error {
@@ -49,13 +83,13 @@ func runServer(s *Server, listener net.Listener) error {
 			return nil
 		}
 
-		go runConnection(conn)
+		go runConnection(conn, s)
 	}
 
 	return nil
 }
 
-func Serve(port int) (*Server, error) {
+func Serve(port int, handler Handler) (*Server, error) {
 	listener, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
 
 	if err != nil {
@@ -64,6 +98,7 @@ func Serve(port int) (*Server, error) {
 
 	server := &Server{
 		listener: listener,
+		handler:  handler,
 	}
 
 	go runServer(server, listener)

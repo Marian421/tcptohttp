@@ -23,6 +23,8 @@ func WriteHeaders(w io.Writer, headers headers.Headers) error {
 		}
 	}
 
+	w.Write([]byte("\r\n"))
+
 	return nil
 }
 
@@ -44,7 +46,7 @@ func WriteStatusLine(w io.Writer, statusCode StatusCode) error {
 	case StatusBad:
 		statusLine = "HTTP/1.1 400 Bad Request\r\n"
 	case StatusInternalError:
-		statusLine = "HTTP/1.1 Internal Server Error\r\n"
+		statusLine = "HTTP/1.1 500 Internal Server Error\r\n"
 	default:
 		statusLine = "Unknown status code\r\n"
 	}
